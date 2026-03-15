@@ -1,11 +1,10 @@
-from datetime import datetime, time
-import requests
-import json
-import re
+from datetime import datetime, time # Importar libreria de tiempo para guardar las horas de los bloques en type: datetime
+import requests # Importar libreria de request para obtener los datos del github
+import json # Importar libreria de Json para cuando tenga los datos del github los tenga en archivo .json
 
 BASE_url = "https://raw.githubusercontent.com/FernandoSapient/BPTSP05_2526-2/main"
 
-#Informacion de los bloques
+#Informacion de los bloques posibles
 
 bloques_fijos = [
     ("Lunes y Miércoles", "7:00", "8:30"),
@@ -24,17 +23,29 @@ bloques_fijos = [
     ("Martes y Jueves", "5:30", "7:00"),
 ]
 
-class StatusSeccion():
-    Assignada = "Asignada"
-    Cerrada_no_prof = "Cerrada_no_prof"
-    sin_asignar_clase = "sin_asignar_clase"
 
 """
 =======================================================
 CLASES
 =======================================================
 """
+
+class StatusSeccion():
+    """
+    Atributos: Assignada: str, Cerrada_no_prof: str, sin_asignar_clase: str
+
+    Clase de tres estados en la cual puede estar la materia
+    """
+    Assignada = "Asignada"
+    Cerrada_no_prof = "Cerrada_no_prof"
+    sin_asignar_clase = "sin_asignar_clase"
+
 class Profesor:
+    """
+    Atributos de Profesor: nombre: str, cedula: str, email: str, max_materias: int
+
+    Metodos de Profesor: Puede_Enseñar_Mas(int) => bool, Puede_dar_clase(Materia) => bool
+    """
     def __init__(self, nombre: str, cedula: str, email: str, max_materias: int):
         self.nombre = nombre
         self.cedula = cedula
@@ -45,7 +56,7 @@ class Profesor:
     def Puede_Enseñar_Mas(self, Asignado: int) -> bool:
         return Asignado < self.max_materias
 
-    def Puede_dar_clase(self, materia: "Materia") -> bool:
+    def Puede_dar_clase(self, materia: Materia) -> bool:
         return materia in self.List_materias
 
     def __str__(self) -> str:
@@ -53,6 +64,11 @@ class Profesor:
         return f"{self.cedula} | {self.nombre} | {self.email} | Max: {self.max_materias} | Materias: {materias}"
 
 class Materia:
+    """
+    Atributos de Materia: codigo_mat: str, nombre_mat: str, secciones_requeridas: int
+
+    Metodos de Materia: Esta_abierta() => bool
+    """
     def __init__(self, codigo_mat: str, nombre_mat: str, secciones_requeridas: int):
         self.codigo = codigo_mat
         self.nombre_mat = nombre_mat
@@ -67,7 +83,11 @@ class Materia:
 
 class Bloque:
     """
-    Dias_disp: String ej = "Lunes y miercoles"
+    Atributos de Bloque: Dias_disp: str, Hora_init: str, Hora_fin: str
+
+    Metodos de Bloque: Etiqueta() => str
+
+    Dias_disp: String ej = "Lunes y miercoles", 
     Hora_init / Hora_fin = String formato: "HH:MM"
     """
     def __init__(self, Dias_disp: str, Hora_init: str, Hora_fin: str):
@@ -91,6 +111,13 @@ class Bloque:
         return self.Etiqueta()
 
 class Seccion:
+    """
+    Atributos Necesarios: NumSeccion: int
+
+    Atributos Propios: status: StatusSeccion, profesor: None, bloque: None, materia: None, id_salon: None
+
+    Metodos: Id_salon() => int | None, Asig_prof(Profesor), Asig_Bloque(Bloque), Marcar_no_Prof(), Marcar_no_Materia()
+    """
     def __init__(self, NumSeccion: int):
         self.NumSeccion = NumSeccion
         self.Status = StatusSeccion.Assignada
@@ -109,6 +136,10 @@ class Seccion:
         self.bloque = bloque
 
     def Marcar_no_Prof(self):
+        """
+        Funcion que vuelve None todos los valores: profesor, bloque, id_salon y le asigna Cerrada sin
+        profesor a la clase Seccion 
+        """
         self.Status = StatusSeccion.Cerrada_no_prof
         self.profesor = None
         self.bloque = None
@@ -126,28 +157,64 @@ class Seccion:
         return (
             f"Materia: {materia} | Sección: {self.NumSeccion} | "
             f"Profesor: {prof} | Bloque: {bloque} | Aula: {salon} | "
-            f"Estado: {self.Status.value}"
+            f"Estado: {self.Status}"
         )
     
 class Horario:
+    """
+    Atributos Necesarios: num_aulas: int
+
+    Atributos Propios: secciones: list
+
+    Metodos: Get_secciones_por_materia(Materia) => list, Get_secciones_por_prof(Profesor) => list, Aulas_ocupadas(Bloque) => int,
+    Aula_abierta(Bloque) => int, Disponibilidad_prof(Profesor, Bloque) => bool
+    """
     def __init__(self, num_aulas: int):
         self.num_aulas = num_aulas
         self.secciones = []
     
     def Get_secciones_por_materia(self, materia: Materia) -> list[Seccion]:
-        return [s for s in self.secciones if s.materia == materia]
+        """
+        Devolver todas las secciones del horario que corresponden a una materia
+        """
+        resultado = []
+        for s in self.secciones:
+            if s.materia == materia:
+                resultado.append(s)
+        return resultado
     
     def Get_secciones_por_prof(self, profesor: Profesor) -> list[Seccion]:
+        """
+        Devuelve una lista con todas las secciones cuyo profesor sea igual al profesor recibido
+        """
         return [s for s in self.secciones if s.profesor == profesor]
     
     def Aulas_ocupadas(self, bloque: Bloque) -> int:
-        return sum( 1 for s in self.secciones
-                   if s.bloque == bloque and s.status == StatusSeccion.Assignada)
+        """
+        Devuelve la cantidad de secciones que que esten usando aulas en el bloque de horario
+
+        Ej de un Bloque => Bloque: Lunes y Miércoles", "7:00", "8:30".
+        Materia: Bases de datos Sec 1 => Aula 1
+        Aulas ocupadas = 1  
+        """
+        contador = 0
+        for s in self.secciones:
+            if s.bloque == bloque and s.status == StatusSeccion.Assignada:
+                contador += 1
+        return contador
     
     def Aula_abierta(self, bloque: Bloque) -> bool:
+        """
+        Funcion que devuelve un valor bool dependiendo de si todavia hay aulas disponibles en ese
+        bloque de horario
+        """
         return self.Aulas_ocupadas(bloque) < self.num_aulas
     
-    def Disponibilidad_prof(self, profesor: Profesor, bloque: Bloque):
+    def Disponibilidad_prof(self, profesor: Profesor, bloque: Bloque) -> bool:
+        """
+        Funcion que devuelve un valor bool si hay algun profesor disponible dentro de ese bloque de 
+        horario
+        """
         for s in self.secciones:
             if s.profesor == profesor and s.bloque == bloque and s.status == StatusSeccion.Assignada:
                 return False
@@ -177,56 +244,91 @@ class SistemaHorarios:
         return json.loads(texto)
     
     def cargar_desde_github(self):
-        materias_raw = self.Cargar_JSON("materias2526-2.json")
+        """
+        Funcion cuyo objetivo es descargar y cargar los datos necesarios del sistema desde el gihub
+        """
+        self.materias = []
+        self.profesores = []
+        self.horario = None
+        profesores_raw = self.Cargar_JSON("profesores.json")
 
-        #Crear materias
+        print("\nSeleccione el archivo de materias a cargar:")
+        print("1. materias2425-3.json")
+        print("2. materias2526-1.json")
+        print("3. materias2526-2.json")
+
+        opcion = input("Opción: ").strip()
+
+        if opcion == "1":
+            archivo_materias = "materias2425-3.json"
+        elif opcion == "2":
+            archivo_materias = "materias2526-1.json"
+        elif opcion == "3":
+            archivo_materias = "materias2526-2.json"
+        else:
+            print("Opción inválida. No se cargaron las materias.")
+            return
+
+        materias_raw = self.Cargar_JSON(archivo_materias)
+
+        # Crear materias
         for item in materias_raw:
             materia = Materia(
-                codigo_mat= str(item.get("Código", "")).strip(),
-                nombre_mat= str(item.get("Nombre", "")).strip(),
-                secciones_requeridas= int(item.get("Secciones", 0))
+                codigo_mat=str(item.get("Código", "")).strip(),
+                nombre_mat=str(item.get("Nombre", "")).strip(),
+                secciones_requeridas=int(item.get("Secciones", 0))
             )
             self.materias.append(materia)
 
-        #Mapa de materias ordenada con su codigo
+        # Mapa para enlazar materias por código
         mapa_materias = {m.codigo: m for m in self.materias}
 
-        
-        profesores_raw = self.Cargar_JSON("profesores.json")
-        #Hacer lista de profesores
+        # Crear profesores
         for item in profesores_raw:
-            nombre = f"{str(item.get("Nombre", "")).strip()} {str(item.get("Apellido", "")).strip()}".strip()
+            nombre = f'{str(item.get("Nombre", "")).strip()} {str(item.get("Apellido", "")).strip()}'.strip()
+
             profesor = Profesor(
-                nombre= nombre,
+                nombre=nombre,
                 cedula=str(item.get("Cedula", "")).strip(),
                 email=str(item.get("Email", "")).strip(),
                 max_materias=int(item.get("Max Carga", 0))
             )
+
             for codigo in item.get("Materias", []):
                 codigo = str(codigo).strip()
                 if codigo in mapa_materias:
                     profesor.List_materias.append(mapa_materias[codigo])
-                
+
             self.profesores.append(profesor)
 
-        print("Datos cargados correctamente")
+        print(f"Datos cargados correctamente desde GitHub usando {archivo_materias}.")
 
     """
     FUNCIONES DE BUSQUEDA
     """
     def buscar_materia(self, codigo: str): #Algoritmo de busqueda lineal simplificado
+        """
+        Busca una materia dentro de la lista de materias del sistema usando su codigo
+        """
         for m in self.materias:
             if m.codigo == codigo:
                 return m
         return None
             
     def buscar_profesor(self, cedula:str):
+        """
+        Busca un profesor usando su numero de cedula.
+        """
         for p in self.profesores:
             if p.cedula == cedula:
                 return p
         return None
 
     def contar_asignadas_profesor(self, profesor: Profesor) -> int:
+        """
+        Cuenta cuantas secciones tiene asigandas un profesor
+        en el horario generado.
+        """
         if self.horario is None:
             return 0 
         return len(self.horario.Get_secciones_por_prof(profesor))
@@ -247,7 +349,10 @@ class SistemaHorarios:
         for p in self.profesores:
             print(p)
 
-    def mostrar_horarios_por_materia(self): # Algoritmo de busqueda donde se itera por secciones
+    def mostrar_horarios_por_materia(self): 
+        """ 
+        Algoritmo de busqueda donde se itera por secciones
+        """
         if self.horario is None: #Revisar si la lista de horarios tiene objetos
             print("No hay horario Disponible")
             return
@@ -288,6 +393,10 @@ class SistemaHorarios:
             print(s)
 
     def mostrar_bloques(self):
+        """
+        Recorre la lista de bloques de horario, Obtiene su indice usando enumerate(), 
+        imprime cada bloque con su numero y horario
+        """
         for i, bloque in enumerate(self.bloques):
             print(f"{i}. {bloque.Etiqueta()}")
 
@@ -295,6 +404,9 @@ class SistemaHorarios:
     GENERAR LOS HORARIOS
     """
     def generar_horarios(self):
+        """
+        
+        """
         if not self.materias:
             print("No hay materias cargadas")
             return
@@ -327,13 +439,11 @@ class SistemaHorarios:
                 bloque_elegido = None
 
                 # 1. intentar bloque no usado por la misma materia
-                for i in range(len(self.bloques)):
-                    """
-                    Logica del algoritmo para recorrer los bloques de horario de forma circular 
-                    % len(self.bloques) se encarga de que el indice vuelva al inicio de cuando llega al final
-                    """
-                    candidato = self.bloques[(bloque_actual + i) % len(self.bloques)] 
 
+                # Se Crea una lista que empieza en bloque_actual y luego añade lo que quedó atrás
+                bloques_reordenados = self.bloques[bloque_actual:] + self.bloques[:bloque_actual]
+
+                for candidato in bloques_reordenados:
                     if self.horario.Aula_abierta(candidato):
                         bloque_elegido = candidato
                         break
@@ -372,7 +482,7 @@ class SistemaHorarios:
                         continue
                     if not profesor.Puede_Enseñar_Mas(self.contar_asignadas_profesor(profesor)):
                         continue
-                    if not self.horario.Disponibilidad_Prof(profesor, bloque_elegido):
+                    if not self.horario.Disponibilidad_prof(profesor, bloque_elegido):
                         continue
 
                     profesor_elegido = profesor
@@ -388,7 +498,7 @@ class SistemaHorarios:
                 # 6. asignar todo
                 seccion.Asig_prof(profesor_elegido)
                 seccion.Asig_Bloque(bloque_elegido)
-                seccion.id_salon = self.horario.Aulas_Ocupadas(bloque_elegido) + 1
+                seccion.id_salon = self.horario.Aulas_ocupadas(bloque_elegido) + 1
                 seccion.Status = StatusSeccion.Assignada
 
                 materia.secciones.append(seccion)
@@ -424,6 +534,10 @@ class SistemaHorarios:
                 print("Opcion Invalida")
 
     def menu_principal(self):
+        """
+        Funcion de ordenamiento para gestionar los datos en base a las funciones de la clase de
+        sistema de horarios.
+        """
         while True:
             print("\n=== SISTEMA DE HORARIOS ===")
             print("1. Cargar datos desde GitHub")
