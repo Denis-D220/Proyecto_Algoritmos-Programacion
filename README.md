@@ -27,8 +27,13 @@ Los datos de profesores y materias se obtienen desde el repositorio de GitHub de
 ## Requisitos
 
 - Python 3.10 o superior
-- Libreria `requests` (`pip install requests`)
 - Conexion a internet (para descargar datos desde GitHub)
+
+Instalar las dependencias con:
+
+```bash
+pip install -r requirements.txt
+```
 
 ## Ejecucion
 
