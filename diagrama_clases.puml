@@ -1,0 +1,162 @@
+@startuml Diagrama de Clases - Sistema de Horarios
+
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+skinparam defaultFontSize 11
+
+title Diagrama de Clases\nSistema de Horarios de Clases\nDenis Daniel & Capozzolo Roguer
+
+' ========================================
+' CLASES DE DATOS
+' ========================================
+
+class StatusSeccion {
+    + {static} Assignada : str = "Asignada"
+    + {static} Cerrada_no_prof : str = "Cerrada_no_prof"
+    + {static} sin_asignar_clase : str = "sin_asignar_clase"
+}
+
+class Materia {
+    + codigo : str
+    + nombre_mat : str
+    + secciones_requeridas : int
+    + secciones : list<Seccion>
+    --
+    + __init__(codigo_mat: str, nombre_mat: str, secciones_requeridas: int)
+    + Esta_abierta() : bool
+    + __str__() : str
+}
+
+class Profesor {
+    + nombre : str
+    + cedula : str
+    + email : str
+    + max_materias : int
+    + List_materias : list<Materia>
+    --
+    + __init__(nombre: str, cedula: str, email: str, max_materias: int)
+    + Puede_Enseñar_Mas(Asignado: int) : bool
+    + Puede_dar_materia(materia: Materia) : bool
+    + __str__() : str
+}
+
+class Bloque {
+    + Dias_disp : str
+    + Hora_init : time
+    + Hora_fin : time
+    --
+    + __init__(Dias_disp: str, Hora_init: str, Hora_fin: str)
+    + Etiqueta() : str
+    + __str__() : str
+}
+
+class Seccion {
+    + NumSeccion : int
+    + Status : str
+    + profesor : Profesor
+    + bloque : Bloque
+    + materia : Materia
+    + id_salon : int
+    --
+    + __init__(NumSeccion: int)
+    + Id_salon() : int | None
+    + Asig_prof(profesor: Profesor)
+    + Asig_Bloque(bloque: Bloque)
+    + Marcar_no_Prof()
+    + Marcar_no_Materia()
+    + __str__() : str
+}
+
+class Horario {
+    + num_aulas : int
+    + secciones : list<Seccion>
+    --
+    + __init__(num_aulas: int)
+    + Get_secciones_por_materia(materia: Materia) : list<Seccion>
+    + Get_secciones_por_prof(profesor: Profesor) : list<Seccion>
+    + Aulas_ocupadas(bloque: Bloque) : int
+    + Aula_abierta(bloque: Bloque) : bool
+    + Disponibilidad_prof(profesor: Profesor, bloque: Bloque) : bool
+}
+
+' ========================================
+' CLASE DEL SISTEMA
+' ========================================
+
+class SistemaHorarios {
+    + profesores : list<Profesor>
+    + materias : list<Materia>
+    + bloques : list<Bloque>
+    + horario : Horario
+    --
+    .. Carga de datos ..
+    + Cargar_JSON(archivo: str) : dict
+    + cargar_desde_github()
+    + crear_listas_en_blanco()
+    --
+    .. Busqueda ..
+    + buscar_materia(codigo: str) : Materia | None
+    + buscar_profesor(cedula: str) : Profesor | None
+    + contar_asignadas_profesor(profesor: Profesor) : int
+    --
+    .. Modulo Profesores ..
+    + listar_profesores()
+    + ver_profesor_especifico()
+    + agregar_profesor()
+    + eliminar_profesor()
+    + modificar_materias_profesor()
+    --
+    .. Modulo Materias ..
+    + listar_materias()
+    + ver_detalle_materia()
+    + ver_profesores_materia()
+    + agregar_materia()
+    + eliminar_materia()
+    + modificar_secciones_materia()
+    --
+    .. Generacion de Horarios ..
+    + generar_horarios()
+    + mostrar_horarios_por_materia()
+    + mostrar_horario_por_profesor()
+    + mostrar_bloques()
+    --
+    .. Modificacion / Post-Generacion ..
+    + ver_salones_por_hora()
+    + guardar_csv()
+    + cargar_csv()
+    + modificar_horario()
+    --
+    .. Menus ..
+    + menu_inicial()
+    + menu_modulos()
+    + menu_profesores()
+    + menu_materias()
+    + menu_post_generacion()
+}
+
+' ========================================
+' RELACIONES
+' ========================================
+
+' Profesor puede dar varias materias
+Profesor "1" --> "*" Materia : enseña
+
+' Seccion es impartida por un profesor, ocurre en un bloque, pertenece a una materia
+Seccion "*" --> "0..1" Profesor : es impartida por
+Seccion "*" --> "0..1" Bloque : ocurre en
+Seccion "*" --> "1" Materia : pertenece a
+Seccion ..> StatusSeccion : tiene
+
+' Materia genera varias secciones
+Materia "1" --> "*" Seccion : genera
+
+' Horario contiene todas las secciones
+Horario "1" *-- "*" Seccion : contiene
+
+' SistemaHorarios gestiona los datos principales
+SistemaHorarios "1" *-- "*" Profesor : gestiona
+SistemaHorarios "1" *-- "*" Materia : gestiona
+SistemaHorarios "1" *-- "*" Bloque : utiliza
+SistemaHorarios "1" *-- "0..1" Horario : genera
+
+@enduml
