@@ -1,8 +1,17 @@
+# ============================================================
+# Proyecto: Sistema de Horarios de Clases
+# Autores: Denis Daniel & Capozzolo Roguer
+# Materia: Algoritmos y Programacion (BPTSP05)
+# Trimestre: 2526-2
+# Universidad Metropolitana
+# ============================================================
+
 from datetime import datetime, time # Importar libreria de tiempo para guardar las horas de los bloques en type: datetime
 import requests # Importar libreria de request para obtener los datos del github
 import json # Importar libreria de Json para cuando tenga los datos del github los tenga en archivo .json
 import os # Importar libreria de os para limpiar la pantalla de la consola
 import csv # Importar libreria de csv para guardar y cargar archivos CSV
+import matplotlib.pyplot as plt # Importar libreria de matplotlib para generar graficas de estadisticas
 
 # URL base para descargar los archivos JSON del repositorio de GitHub
 BASE_url = "https://raw.githubusercontent.com/FernandoSapient/BPTSP05_2526-2/main"
@@ -243,7 +252,18 @@ class Horario:
             if s.profesor == profesor and s.bloque == bloque and s.Status == StatusSeccion.Assignada:
                 return False
         return True
-    
+
+    def Bloque_tiene_materia(self, bloque: Bloque, materia) -> bool:
+        """
+        Revisa si un bloque ya tiene una seccion de esa materia asignada.
+        Se usa para no repetir la misma materia en el mismo bloque.
+        Retorna True si ya hay una seccion de esa materia en el bloque.
+        """
+        for s in self.secciones:
+            if s.bloque == bloque and s.materia == materia and s.Status == StatusSeccion.Assignada:
+                return True
+        return False
+
 """
  CLASE DEL SISTEMA
 """
@@ -1035,22 +1055,25 @@ class SistemaHorarios:
 
                 bloque_elegido = None
 
-                # --- PASO 1: Buscar bloque con aula disponible ---
+                # --- PASO 1: Buscar bloque con aula disponible que NO tenga esta materia ---
                 # Crear lista reordenada empezando desde bloque_actual (recorrido circular)
                 # Esto distribuye las secciones de distintas materias en bloques diferentes
                 bloques_reordenados = self.bloques[bloque_actual:] + self.bloques[:bloque_actual]
 
-                # Recorrer los bloques en orden circular buscando uno con aula libre
+                # Primero buscar un bloque que tenga aula libre Y que no tenga
+                # ya una seccion de esta misma materia (para no repetir)
                 for candidato in bloques_reordenados:
-                    if self.horario.Aula_abierta(candidato):
-                        bloque_elegido = candidato
-                        break
+                    if not self.horario.Aula_abierta(candidato):
+                        continue  # No hay aula libre, saltar
+                    if self.horario.Bloque_tiene_materia(candidato, materia):
+                        continue  # Ya tiene esta materia, saltar
+                    bloque_elegido = candidato
+                    break
 
-                # --- PASO 2: Si no se encontro, buscar cualquier bloque libre ---
+                # --- PASO 2: Si no hay bloque sin esta materia, usar cualquiera con aula ---
+                # Esto pasa cuando todos los bloques con aula ya tienen esta materia
                 if bloque_elegido is None:
-                    for i in range(len(self.bloques)):
-                        indice = (bloque_actual + i) % len(self.bloques)
-                        candidato = self.bloques[indice]
+                    for candidato in bloques_reordenados:
                         if self.horario.Aula_abierta(candidato):
                             bloque_elegido = candidato
                             break
@@ -1687,6 +1710,216 @@ class SistemaHorarios:
 
     """
     =======================================================
+    MODULO DE ESTADISTICAS (Modulo 5 - Opcional)
+    =======================================================
+    """
+
+    def estadistica_salones_por_hora(self):
+        """
+        Grafica de barras que muestra cuantos salones estan ocupados
+        en cada bloque horario. Incluye una linea roja con el maximo.
+        """
+        if self.horario is None:
+            print("No hay horario generado.")
+            return
+
+        # Preparar los datos para la grafica
+        nombres_bloques = []  # Nombres de los bloques para el eje X
+        salones_ocupados = []  # Cantidad de salones ocupados para el eje Y
+
+        for bloque in self.bloques:
+            # Crear nombre corto para que quepa en la grafica
+            inicio = bloque.Hora_init.strftime("%H:%M")
+            fin = bloque.Hora_fin.strftime("%H:%M")
+            if "Lunes" in bloque.Dias_disp:
+                dias_corto = "L-M"
+            else:
+                dias_corto = "M-J"
+            nombre = f"{dias_corto}\n{inicio}-{fin}"
+            nombres_bloques.append(nombre)
+
+            # Contar salones ocupados en este bloque
+            ocupados = self.horario.Aulas_ocupadas(bloque)
+            salones_ocupados.append(ocupados)
+
+        # Crear la grafica de barras
+        plt.figure(figsize=(14, 6))
+        plt.bar(range(len(nombres_bloques)), salones_ocupados, color="steelblue")
+
+        # Linea roja que muestra el maximo de salones
+        plt.axhline(y=self.horario.num_aulas, color="red", linestyle="--",
+                     label=f"Maximo de salones ({self.horario.num_aulas})")
+
+        # Titulos y etiquetas
+        plt.xlabel("Bloque Horario")
+        plt.ylabel("Salones Ocupados")
+        plt.title("Salones Ocupados por Bloque Horario")
+        plt.xticks(range(len(nombres_bloques)), nombres_bloques, fontsize=7)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+        print("Grafica de salones por hora generada.")
+
+    def estadistica_carga_profesores(self):
+        """
+        Grafica de barras horizontales que muestra el porcentaje de
+        materias asignadas vs permitidas de cada profesor.
+        """
+        if self.horario is None:
+            print("No hay horario generado.")
+            return
+
+        if not self.profesores:
+            print("No hay profesores cargados.")
+            return
+
+        # Preparar los datos
+        nombres_profesores = []
+        porcentajes = []
+
+        for profesor in self.profesores:
+            nombres_profesores.append(profesor.nombre)
+
+            # Contar cuantas secciones tiene asignadas
+            secciones_asignadas = self.contar_asignadas_profesor(profesor)
+
+            # Calcular porcentaje (evitar division por cero)
+            if profesor.max_materias > 0:
+                porcentaje = (secciones_asignadas / profesor.max_materias) * 100
+            else:
+                porcentaje = 0
+
+            porcentajes.append(porcentaje)
+
+        # Crear grafica de barras horizontales
+        plt.figure(figsize=(10, max(6, len(self.profesores) * 0.4)))
+        plt.barh(range(len(nombres_profesores)), porcentajes, color="mediumseagreen")
+
+        # Titulos y etiquetas
+        plt.xlabel("Porcentaje de Carga (%)")
+        plt.ylabel("Profesor")
+        plt.title("Porcentaje de Materias Asignadas por Profesor")
+        plt.yticks(range(len(nombres_profesores)), nombres_profesores, fontsize=7)
+        plt.xlim(0, 110)
+
+        # Mostrar el porcentaje al final de cada barra
+        for i in range(len(porcentajes)):
+            plt.text(porcentajes[i] + 1, i, f"{porcentajes[i]:.1f}%", va="center", fontsize=8)
+
+        plt.tight_layout()
+        plt.show()
+        print("Grafica de carga de profesores generada.")
+
+    def estadistica_secciones_cerradas(self):
+        """
+        Grafica de barras que muestra el porcentaje de secciones cerradas
+        por cada materia. Verde = 0%, naranja = menos de 50%, rojo = 50% o mas.
+        """
+        if self.horario is None:
+            print("No hay horario generado.")
+            return
+
+        if not self.materias:
+            print("No hay materias cargadas.")
+            return
+
+        # Preparar los datos
+        nombres_materias = []
+        porcentajes_cerradas = []
+
+        for materia in self.materias:
+            # Solo materias que se ofertan (secciones > 0)
+            if materia.secciones_requeridas <= 0:
+                continue
+
+            nombres_materias.append(materia.codigo)
+
+            # Contar secciones cerradas
+            total_secciones = len(materia.secciones)
+            secciones_cerradas = 0
+
+            for seccion in materia.secciones:
+                if seccion.Status == StatusSeccion.Cerrada_no_prof:
+                    secciones_cerradas = secciones_cerradas + 1
+                elif seccion.Status == StatusSeccion.sin_asignar_clase:
+                    secciones_cerradas = secciones_cerradas + 1
+
+            # Calcular porcentaje
+            if total_secciones > 0:
+                porcentaje = (secciones_cerradas / total_secciones) * 100
+            else:
+                porcentaje = 0
+
+            porcentajes_cerradas.append(porcentaje)
+
+        if not nombres_materias:
+            print("No hay materias con secciones para graficar.")
+            return
+
+        # Asignar colores segun el porcentaje
+        colores = []
+        for porcentaje in porcentajes_cerradas:
+            if porcentaje == 0:
+                colores.append("mediumseagreen")  # Verde = todo bien
+            elif porcentaje < 50:
+                colores.append("orange")  # Naranja = algunas cerradas
+            else:
+                colores.append("tomato")  # Rojo = muchas cerradas
+
+        # Crear grafica de barras
+        plt.figure(figsize=(14, 6))
+        plt.bar(range(len(nombres_materias)), porcentajes_cerradas, color=colores)
+
+        # Titulos y etiquetas
+        plt.xlabel("Materia")
+        plt.ylabel("Porcentaje de Secciones Cerradas (%)")
+        plt.title("Porcentaje de Secciones Cerradas por Materia")
+        plt.xticks(range(len(nombres_materias)), nombres_materias, rotation=45,
+                   fontsize=7, ha="right")
+        plt.ylim(0, 110)
+        plt.tight_layout()
+        plt.show()
+        print("Grafica de secciones cerradas generada.")
+
+    def menu_estadisticas(self):
+        """
+        Sub-menu del modulo de estadisticas.
+        Permite elegir cual grafica ver.
+        """
+        while True:
+            limpiar_pantalla()
+            print("=" * 45)
+            print("   MODULO DE ESTADISTICAS")
+            print("=" * 45)
+            print("1. Salones ocupados por bloque horario")
+            print("2. Porcentaje de carga por profesor")
+            print("3. Porcentaje de secciones cerradas por materia")
+            print("0. Volver")
+            print("-" * 45)
+
+            opcion = input("Seleccione una opcion: ").strip()
+
+            if opcion == "1":
+                self.estadistica_salones_por_hora()
+                input("\nPresione Enter para continuar...")
+
+            elif opcion == "2":
+                self.estadistica_carga_profesores()
+                input("\nPresione Enter para continuar...")
+
+            elif opcion == "3":
+                self.estadistica_secciones_cerradas()
+                input("\nPresione Enter para continuar...")
+
+            elif opcion == "0":
+                break
+
+            else:
+                print("Opcion invalida. Intente de nuevo.")
+                input("Presione Enter para continuar...")
+
+    """
+    =======================================================
     MENUS DEL SISTEMA
     =======================================================
     """
@@ -1901,6 +2134,7 @@ class SistemaHorarios:
             print("3. Ver salones asignados a una hora")
             print("4. Guardar horario en CSV")
             print("5. Modificar asignacion de horarios")
+            print("6. Ver estadisticas (graficas)")
             print("0. Volver")
             print("-" * 45)
 
@@ -1925,6 +2159,9 @@ class SistemaHorarios:
             elif opcion == "5":
                 self.modificar_horario()
                 input("\nPresione Enter para continuar...")
+
+            elif opcion == "6":
+                self.menu_estadisticas()
 
             elif opcion == "0":
                 break

@@ -1,0 +1,25 @@
+# IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.env
+
+# Project files
+Proyecto Algoritmos 2526-2.pdf
+
+# OS files
+.DS_Store
+Thumbs.db
